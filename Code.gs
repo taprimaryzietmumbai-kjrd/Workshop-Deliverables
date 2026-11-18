@@ -78,6 +78,7 @@ function route_(b){
 }
 
 function createWorkshop_(b){
+  setup(); // Ensure the destination database tabs and Drive folders exist; source nominations remain read-only.
   const title=String(b.title||'').trim();if(!title)throw new Error('Enter a workshop title');
   const id='WS-'+Utilities.getUuid().slice(0,8).toUpperCase();
   appendObject_('Workshops',{'Workshop ID':id,'Workshop Title':title,'Start Date':b.startDate||'','End Date':b.endDate||'','Region':b.region||'','Status':'Active','Created At':new Date()});
