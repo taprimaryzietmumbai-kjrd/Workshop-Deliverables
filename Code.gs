@@ -21,8 +21,13 @@ const SHEETS = {
   Audit_Log: ['Timestamp','User Email','Action','Workshop ID','Participant ID','Details']
 };
 function doGet() {
-  return HtmlService.createHtmlOutput('<h2>ZIET Workshop Impact Hub API</h2><p>Backend is running. Use the GitHub Pages interface to access the portal.</p>')
-    .setTitle('ZIET Workshop Impact Hub');
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('Workshop Deliverables & Classroom Impact Hub | ZIET Mumbai')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+// Called by the participant interface through google.script.run when served by Apps Script.
+function apiCall(payload) {
+  return route_(payload || {});
 }
 function doPost(e) {
   try {
