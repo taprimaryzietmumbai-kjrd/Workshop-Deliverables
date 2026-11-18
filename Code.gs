@@ -12,9 +12,9 @@ const CONFIG = {
 };
 const SHEETS = {
   Workshops: ['Workshop ID','Workshop Title','Start Date','End Date','Region','Status','Created At'],
-  Participants: ['Participant ID','Workshop ID','Name','Designation','Vidyalaya','Region','Employee Code','DOJ','DOB','Gender','Social Category','PwD Status','WhatsApp','Individual Email','Vidyalaya Email','KVS Recognitions','Created At','Updated At'],
+  Participants: ['Participant ID','Workshop ID','Name','Designation','Vidyalaya','Region','Employee Code','DOJ','DOB','Gender','Social Category','PwD Status','WhatsApp','Individual Email','Vidyalaya Email','KVS Recognitions','Drive Folder ID','Drive Folder URL','Created At','Updated At'],
   Submissions: ['Submission ID','Workshop ID','Participant ID','Phase','Category','Submission Date','Title','Description','Link','File ID','Status','Updated At'],
-  Daily_Proceedings: ['Entry ID','Workshop ID','Participant ID','Day/Date','Proceedings','Document Link','Studio Details','Studio Link','Group Work','Group Link','Takeaways','Resource Links','Updated At'],
+  Daily_Proceedings: ['Entry ID','Workshop ID','Participant ID','Day/Date','Proceedings','Document Link','Studio Details','Studio Link','Group Work','Group Link','Assignment','Assignment Link','Takeaways','Resource Links','Updated At'],
   Classroom_Impact: ['Entry ID','Workshop ID','Participant ID','Implementation Date','Class/Subject','Challenge','Intervention','Lesson Link','Student Response','Student Work Link','Evidence Link','Peer Feedback','School Sharing','Updated At'],
   Action_Research: ['Entry ID','Workshop ID','Participant ID','Title','Problem','Research Question','Baseline','Intervention','Method','Findings','Analysis','Reflection','Future CPD Need','Updated At'],
   Monitoring: ['Entry ID','Workshop ID','Participant ID','Milestone','Status','Progress Update','Evidence Link','Next Steps','Updated At'],
@@ -137,9 +137,10 @@ function saveSubmission_(b){
     if(section==='profile'){
       upsertParticipant_(b.participantId,v);audit_('save profile',b);
     }else if(section==='pre'){
-      Object.keys(v).forEach((k)=>{if(v[k])appendObject_('Submissions',{'Submission ID':Utilities.getUuid(),'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Phase':'Pre','Category':k,'Submission Date':now,'Title':k,'Description':String(v[k]),'Status':'Submitted','Updated At':now});});audit_('save pre',b);
+      const preItems=[['Best Practice','bestPractice','bestPracticeLink'],['Lesson Plan / Unit Plan','lessonPlan','lessonPlanLink'],['Teaching Learning Material','tlm','tlmLink'],['Assessment Tool / Rubric','assessment','assessmentLink'],['Self-assessment & Learning Needs','tna',''],['Workshop Expectations','expectations','']];
+      preItems.forEach(([title,descKey,linkKey])=>{const desc=String(v[descKey]||'');const link=linkKey?String(v[linkKey]||''):'';if(desc||link)appendObject_('Submissions',{'Submission ID':Utilities.getUuid(),'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Phase':'Pre','Category':title,'Submission Date':now,'Title':title,'Description':desc,'Link':link,'Status':'Submitted','Updated At':now});});audit_('save pre',b);
     }else if(section==='ongoing'){
-      appendObject_('Daily_Proceedings',{'Entry ID':recordId,'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Day/Date':v.date,'Proceedings':v.proceedings,'Document Link':v.proceedingsLink,'Studio Details':v.studio,'Studio Link':v.studioLink,'Group Work':v.groupTask,'Group Link':v.groupLink,'Takeaways':v.takeaways,'Resource Links':v.resourceLinks,'Updated At':now});audit_('save ongoing',b);
+      appendObject_('Daily_Proceedings',{'Entry ID':recordId,'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Day/Date':v.date,'Proceedings':v.proceedings,'Document Link':v.proceedingsLink,'Studio Details':v.studio,'Studio Link':v.studioLink,'Group Work':v.groupTask,'Group Link':v.groupLink,'Assignment':v.assignment,'Assignment Link':v.assignmentLink,'Takeaways':v.takeaways,'Resource Links':v.resourceLinks,'Updated At':now});audit_('save ongoing',b);
     }else if(section==='post'){
       appendObject_('Classroom_Impact',{'Entry ID':recordId,'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Implementation Date':v.implementationDate,'Class/Subject':v.classSubject,'Challenge':v.challenge,'Intervention':v.implementation,'Lesson Link':v.lessonLink,'Student Response':v.studentResponse,'Student Work Link':v.studentWorkLink,'Evidence Link':v.evidenceLink,'Peer Feedback':v.peerFeedback,'School Sharing':v.sharing,'Updated At':now});audit_('save post',b);
     }else if(section==='research'){
