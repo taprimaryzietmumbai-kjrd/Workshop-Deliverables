@@ -9,7 +9,7 @@ Banner-led responsive participant and administrator portal for workshop preparat
 ## Configured Google resources
 - Master spreadsheet: `1y8BQ3UsRE7xlHQFPyRVops7vOh8n7ZOvsEuI4sLXMZQ`
 - Drive repository folder: `1pFe84ogk9ihbPDTmwscOVPHvIyUcYC7q`
-- Nameplates source: configured to scan the master spreadsheet for a sheet whose first row contains recognizable Name and Vidyalaya/School headers. The Admin panel also accepts an explicit tab name.
+- official Corrections Sheet nominations source: configured to scan the master spreadsheet for a sheet whose first row contains recognizable Name and Vidyalaya/School headers. The Admin panel also accepts an explicit tab name.
 
 ## Install in the existing Apps Script project
 Open the Apps Script project supplied by the administrator:
@@ -25,12 +25,20 @@ https://script.google.com/u/0/home/projects/1WzLjKwi2HTtKiRZmA6ZHpshL5YAtf3zJ52S
 ## First-time administration
 1. Open the Web App and navigate to **ZIET Admin**.
 2. Create a workshop with title, batch/region and dates.
-3. Choose the Nameplates tab (or leave blank for auto-detection), then click **Import Nameplates Participants**.
-4. Participants can then choose their workshop and name, complete their profile and submit deliverables.
+3. Choose the official Corrections Sheet nominations tab (or leave blank for auto-detection), then click **Import participants from Corrections Sheet**.
+4. Participants can then choose their workshop and name, complete their profile, submit stage-wise deliverables, and retrieve saved submissions when reopening the workspace.
 5. Generate an A4 PDF workbook from the participant workspace.
 
 ## Data model created by setup
-`Workshops`, `Participants`, `Submissions`, `Daily_Proceedings`, `Classroom_Impact`, `Action_Research`, `Monitoring`, `Audit_Log`.
+`Workshops`, `Participants`, `Submissions`, `Daily_Proceedings`, `Classroom_Impact`, `Action_Research`, `Monitoring`, `Stage_Status`, `Group_Deliverables`, `Audit_Log`.
 
 ## Important release checks
 This repository contains the source implementation, not a deployment of the Apps Script project. The supplied Apps Script project must receive the two source files and be deployed by an authorized account. Before live participant use, configure and test sign-in / participant identity verification, administrator allow-listing, upload handling, consent for any photo/GPS evidence, and access permissions for personal data (including DOB, social category and PwD status). The current prototype does not yet enforce an administrator allow-list or verify participant identity; its Admin menu is therefore not a security boundary. The current evidence fields accept Drive/document links; direct browser camera/GPS capture and direct file uploads are not yet implemented.
+
+
+## Current implementation notes
+- Pre, Ongoing, Post, Action Research and Monitoring records are stored separately.
+- Pre-stage items are upserted by participant and category; Ongoing entries remain separate dated records; Post, Research and each Monitoring milestone can be revised by the participant.
+- `Stage_Status` stores participant-stage submission state and administrative verification fields. Verification states are distinct from implementation and impact evidence.
+- `Group_Deliverables` stores collaborative outputs and member references.
+- This is an active development branch, not yet a production release. Administrative authorization, identity verification, stage-specific compulsory/optional configuration, comprehensive edit/history UI, and full deployment synchronization remain release requirements.
