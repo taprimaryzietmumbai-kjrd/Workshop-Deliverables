@@ -19,6 +19,8 @@ const SHEETS = {
   Classroom_Impact: ['Entry ID','Workshop ID','Participant ID','Implementation Date','Class/Subject','Challenge','Intervention','Lesson Link','Student Response','Student Work Link','Evidence Link','Peer Feedback','School Sharing','Updated At'],
   Action_Research: ['Entry ID','Workshop ID','Participant ID','Title','Problem','Research Question','Baseline','Intervention','Method','Findings','Analysis','Reflection','Future CPD Need','Updated At'],
   Monitoring: ['Entry ID','Workshop ID','Participant ID','Milestone','Status','Progress Update','Evidence Link','Next Steps','Updated At'],
+  Stage_Status: ['Status ID','Workshop ID','Participant ID','Stage','Completion Status','Submitted Items','Last Submitted At','Admin Verification','Verification Notes','Verified At'],
+  Group_Deliverables: ['Entry ID','Workshop ID','Group Name','Contribution Type','Title','Description','Evidence Link','Member Participant IDs','Submitted By','Status','Updated At'],
   Audit_Log: ['Timestamp','User Email','Action','Workshop ID','Participant ID','Details']
 };
 function doGet() {
@@ -69,7 +71,7 @@ function route_(b){
     case 'syncCorrectionsRoster': return syncCorrectionsRoster_(b);
     case 'listWorkshops': return {workshops:listRows_('Workshops').filter(r=>String(r['Workshop Title']||'').trim()).map(r=>({id:r['Workshop ID'],title:r['Workshop Title']}))};
     case 'listParticipants': return {participants:listRows_('Participants').filter(r=>String(r['Workshop ID'])===String(b.workshopId)).map(r=>({id:r['Participant ID'],name:r.Name,designation:r.Designation,vidyalaya:r.Vidyalaya}))};
-    case 'saveSubmission': return saveSubmission_(b);
+    case 'saveSubmission': return saveSubmission_(b);\n    case 'getParticipantSubmissions': return getParticipantSubmissions_(b);\n    case 'saveGroupDeliverable': return saveGroupDeliverable_(b);\n    case 'verifySubmission': return verifySubmission_(b);
     case 'adminSummary': return adminSummary_(b);
     case 'createWorkbookPdf': return createWorkbookPdf_(b);
     case 'exportAdminCsv': return exportAdminCsv_(b);
@@ -201,26 +203,76 @@ function saveSubmission_(b){
   const lock=LockService.getScriptLock();lock.waitLock(20000);
   try{
     const section=String(b.section||'');const v=b.values||{};
-    const mapping={profile:['Participants',{'Employee Code':'employeeCode','DOJ':'doj','DOB':'dob','Gender':'gender','Social Category':'socialCategory','PwD Status':'pwdStatus','WhatsApp':'whatsapp','Individual Email':'individualEmail','Vidyalaya Email':'vidyalayaEmail','KVS Recognitions':'recognitions'}],pre:['Submissions',{}],ongoing:['Daily_Proceedings',{}],post:['Classroom_Impact',{}],research:['Action_Research',{}],monitor:['Monitoring',{}]};
-    const tab=mapping[section];if(!tab)throw new Error('Invalid section');
-    const sh=ss_().getSheetByName(tab[0]);if(!sh)throw new Error('Run setup() first');
-    const recordId=Utilities.getUuid(), now=new Date();
+    const mapping={profile:'Participants',pre:'Submissions',ongoing:'Daily_Proceedings',post:'Classroom_Impact',research:'Action_Research',monitor:'Monitoring'};
+    const sheetName=mapping[section];if(!sheetName)throw new Error('Invalid section');
+    if(!ss_().getSheetByName(sheetName))throw new Error('Run setup() first');
+    const now=new Date();let recordId=String(b.recordId||'');
     if(section==='profile'){
-      upsertParticipant_(b.participantId,v);audit_('save profile',b);
-    }else if(section==='pre'){
-      const preItems=[['Best Practice','bestPractice','bestPracticeLink'],['Lesson Plan / Unit Plan','lessonPlan','lessonPlanLink'],['Teaching Learning Material','tlm','tlmLink'],['Assessment Tool / Rubric','assessment','assessmentLink'],['Self-assessment & Learning Needs','tna',''],['Workshop Expectations','expectations','']];
-      preItems.forEach(([title,descKey,linkKey])=>{const desc=String(v[descKey]||'');const link=linkKey?String(v[linkKey]||''):'';if(desc||link)appendObject_('Submissions',{'Submission ID':Utilities.getUuid(),'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Phase':'Pre','Category':title,'Submission Date':now,'Title':title,'Description':desc,'Link':link,'Status':'Submitted','Updated At':now});});audit_('save pre',b);
-    }else if(section==='ongoing'){
-      appendObject_('Daily_Proceedings',{'Entry ID':recordId,'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Day/Date':v.date,'Proceedings':v.proceedings,'Document Link':v.proceedingsLink,'Studio Details':v.studio,'Studio Link':v.studioLink,'Group Work':v.groupTask,'Group Link':v.groupLink,'Assignment':v.assignment,'Assignment Link':v.assignmentLink,'Takeaways':v.takeaways,'Resource Links':v.resourceLinks,'Updated At':now});audit_('save ongoing',b);
-    }else if(section==='post'){
-      appendObject_('Classroom_Impact',{'Entry ID':recordId,'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Implementation Date':v.implementationDate,'Class/Subject':v.classSubject,'Challenge':v.challenge,'Intervention':v.implementation,'Lesson Link':v.lessonLink,'Student Response':v.studentResponse,'Student Work Link':v.studentWorkLink,'Evidence Link':v.evidenceLink,'Peer Feedback':v.peerFeedback,'School Sharing':v.sharing,'Updated At':now});audit_('save post',b);
-    }else if(section==='research'){
-      appendObject_('Action_Research',{'Entry ID':recordId,'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Title':v.researchTitle,'Problem':v.problem,'Research Question':v.question,'Baseline':v.baseline,'Intervention':v.intervention,'Method':v.method,'Findings':v.findings,'Analysis':v.analysis,'Reflection':v.reflection,'Future CPD Need':v.futureNeed,'Updated At':now});audit_('save research',b);
-    }else if(section==='monitor'){
-      appendObject_('Monitoring',{'Entry ID':recordId,'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Milestone':v.milestone,'Status':v.status,'Progress Update':v.progress,'Evidence Link':v.monitorLink,'Next Steps':v.nextSteps,'Updated At':now});audit_('save monitoring',b);
+      upsertParticipant_(b.participantId,v);audit_('save profile',b);return {saved:true,id:b.participantId};
     }
-    return {saved:true,id:recordId};
+    if(section==='pre'){
+      const items=[['Best Practice','bestPractice','bestPracticeLink'],['Lesson Plan / Unit Plan','lessonPlan','lessonPlanLink'],['Teaching Learning Material','tlm','tlmLink'],['Assessment Tool / Rubric','assessment','assessmentLink'],['Self-assessment & Learning Needs','tna',''],['Workshop Expectations','expectations','']];
+      let saved=0;
+      items.forEach(([title,dk,lk])=>{
+        const desc=String(v[dk]||'').trim(),link=lk?String(v[lk]||'').trim():'';
+        if(!desc&&!link)return;
+        const existing=listRows_('Submissions').find(r=>String(r['Workshop ID'])===String(b.workshopId)&&String(r['Participant ID'])===String(b.participantId)&&r.Phase==='Pre'&&r.Category===title);
+        const obj={'Submission ID':existing?existing['Submission ID']:Utilities.getUuid(),'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Phase':'Pre','Category':title,'Submission Date':existing?existing['Submission Date']:now,'Title':title,'Description':desc,'Link':link,'Status':'Submitted','Updated At':now};
+        if(existing)updateObjectById_('Submissions','Submission ID',existing['Submission ID'],obj);else appendObject_('Submissions',obj);
+        saved++;
+      });
+      updateStageStatus_(b.workshopId,b.participantId,'Pre',saved);
+      audit_('save pre',b);return {saved:true,id:'pre-'+b.participantId,itemsSaved:saved};
+    }
+    const defs={
+      ongoing:{idCol:'Entry ID',obj:{'Day/Date':v.date,'Proceedings':v.proceedings,'Document Link':v.proceedingsLink,'Studio Details':v.studio,'Studio Link':v.studioLink,'Group Work':v.groupTask,'Group Link':v.groupLink,'Assignment':v.assignment,'Assignment Link':v.assignmentLink,'Takeaways':v.takeaways,'Resource Links':v.resourceLinks}},
+      post:{idCol:'Entry ID',obj:{'Implementation Date':v.implementationDate,'Class/Subject':v.classSubject,'Challenge':v.challenge,'Intervention':v.implementation,'Lesson Link':v.lessonLink,'Student Response':v.studentResponse,'Student Work Link':v.studentWorkLink,'Evidence Link':v.evidenceLink,'Peer Feedback':v.peerFeedback,'School Sharing':v.sharing}},
+      research:{idCol:'Entry ID',obj:{'Title':v.researchTitle,'Problem':v.problem,'Research Question':v.question,'Baseline':v.baseline,'Intervention':v.intervention,'Method':v.method,'Findings':v.findings,'Analysis':v.analysis,'Reflection':v.reflection,'Future CPD Need':v.futureNeed}},
+      monitor:{idCol:'Entry ID',obj:{'Milestone':v.milestone,'Status':v.status,'Progress Update':v.progress,'Evidence Link':v.monitorLink,'Next Steps':v.nextSteps}}
+    };
+    const d=defs[section];
+    const obj={'Workshop ID':b.workshopId,'Participant ID':b.participantId,...d.obj,'Updated At':now};
+    if(section==='ongoing'&&!recordId)recordId=Utilities.getUuid();
+    if(section!=='ongoing'&&!recordId){
+      const match=listRows_(sheetName).find(r=>String(r['Workshop ID'])===String(b.workshopId)&&String(r['Participant ID'])===String(b.participantId)&&(section!=='monitor'||String(r.Milestone)===String(v.milestone)));
+      if(match)recordId=String(match[d.idCol]);
+    }
+    obj[d.idCol]=recordId||Utilities.getUuid();
+    if(recordId&&rowById_(sheetName,d.idCol,recordId))updateObjectById_(sheetName,d.idCol,recordId,obj);else appendObject_(sheetName,obj);
+    updateStageStatus_(b.workshopId,b.participantId,section==='ongoing'?'Ongoing':section==='post'?'Post':section==='research'?'Action Research':'Monitoring',1);
+    audit_('save '+section,b);return {saved:true,id:obj[d.idCol],updated:!!recordId};
   }finally{lock.releaseLock();}
+}
+function rowById_(sheet,idCol,id){return listRows_(sheet).find(r=>String(r[idCol])===String(id));}
+function updateObjectById_(sheet,idCol,id,obj){
+  const sh=ss_().getSheetByName(sheet),data=sh.getDataRange().getValues(),heads=data[0],ix=heads.indexOf(idCol);
+  const ri=data.findIndex((r,i)=>i>0&&String(r[ix])===String(id));if(ri<1)throw new Error('Record to update was not found.');
+  heads.forEach((h,i)=>{if(Object.prototype.hasOwnProperty.call(obj,h))sh.getRange(ri+1,i+1).setValue(obj[h]);});
+}
+function updateStageStatus_(workshopId,participantId,stage,count){
+  const sh=ss_().getSheetByName('Stage_Status'),rows=listRows_('Stage_Status');
+  const old=rows.find(r=>String(r['Workshop ID'])===String(workshopId)&&String(r['Participant ID'])===String(participantId)&&r.Stage===stage);
+  const obj={'Status ID':old?old['Status ID']:Utilities.getUuid(),'Workshop ID':workshopId,'Participant ID':participantId,'Stage':stage,'Completion Status':'Submitted','Submitted Items':count,'Last Submitted At':new Date()};
+  if(old)updateObjectById_('Stage_Status','Status ID',old['Status ID'],obj);else appendObject_('Stage_Status',obj);
+}
+function getParticipantSubmissions_(b){
+  const match=r=>String(r['Workshop ID'])===String(b.workshopId)&&String(r['Participant ID'])===String(b.participantId);
+  return {pre:listRows_('Submissions').filter(r=>match(r)&&r.Phase==='Pre'),ongoing:listRows_('Daily_Proceedings').filter(match),post:listRows_('Classroom_Impact').filter(match),research:listRows_('Action_Research').filter(match),monitor:listRows_('Monitoring').filter(match),stages:listRows_('Stage_Status').filter(match)};
+}
+function saveGroupDeliverable_(b){
+  const v=b.values||{},id=String(b.recordId||Utilities.getUuid());
+  const obj={'Entry ID':id,'Workshop ID':b.workshopId,'Group Name':v.groupName,'Contribution Type':v.contributionType,'Title':v.title,'Description':v.description,'Evidence Link':v.evidenceLink,'Member Participant IDs':(v.memberParticipantIds||[]).join('|'),'Submitted By':b.participantId,'Status':'Submitted','Updated At':new Date()};
+  if(rowById_('Group_Deliverables','Entry ID',id))updateObjectById_('Group_Deliverables','Entry ID',id,obj);else appendObject_('Group_Deliverables',obj);
+  audit_('save group deliverable',b);return {saved:true,id:id};
+}
+function verifySubmission_(b){
+  const allowed=['Pending','Verified','Needs Revision','Implemented','Impact Documented'];
+  if(allowed.indexOf(String(b.status))<0)throw new Error('Invalid verification status');
+  const sh=ss_().getSheetByName('Stage_Status'),rows=listRows_('Stage_Status');
+  const r=rows.find(x=>String(x['Workshop ID'])===String(b.workshopId)&&String(x['Participant ID'])===String(b.participantId)&&x.Stage===b.stage);
+  if(!r)throw new Error('Stage submission record not found');
+  updateObjectById_('Stage_Status','Status ID',r['Status ID'],{'Admin Verification':b.status,'Verification Notes':b.notes||'','Verified At':new Date()});
+  audit_('verify '+b.stage,{...b,values:{status:b.status,notes:b.notes||''}});return {saved:true};
 }
 function appendObject_(sheet,obj){
   const sh=ss_().getSheetByName(sheet);const heads=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
