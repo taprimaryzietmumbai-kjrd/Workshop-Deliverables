@@ -66,7 +66,7 @@ function route_(b){
     case 'setup': return setup();
     case 'listSheets': return {sheets:ss_().getSheets().map(s=>s.getName())};
     case 'createWorkshop': return createWorkshop_(b);
-    case 'syncNameplates': return syncNameplates_(b);
+    case 'syncCorrectionsRoster': return syncCorrectionsRoster_(b);
     case 'listWorkshops': return {workshops:listRows_('Workshops').filter(r=>String(r['Workshop Title']||'').trim()).map(r=>({id:r['Workshop ID'],title:r['Workshop Title']}))};
     case 'listParticipants': return {participants:listRows_('Participants').filter(r=>String(r['Workshop ID'])===String(b.workshopId)).map(r=>({id:r['Participant ID'],name:r.Name,designation:r.Designation,vidyalaya:r.Vidyalaya}))};
     case 'saveSubmission': return saveSubmission_(b);
@@ -83,46 +83,112 @@ function createWorkshop_(b){
   appendObject_('Workshops',{'Workshop ID':id,'Workshop Title':title,'Start Date':b.startDate||'','End Date':b.endDate||'','Region':b.region||'','Status':'Active','Created At':new Date()});
   return {id,title};
 }
-function syncNameplates_(b){
-  const sourceId=CONFIG.NAMEPLATES_SPREADSHEET_ID||CONFIG.SPREADSHEET_ID;
-  const source=SpreadsheetApp.openById(sourceId);
-  const wanted=String(b.sheetName||CONFIG.NAMEPLATES_SHEET_NAME||'').trim();
-  let sh=wanted?source.getSheetByName(wanted):null;
-  if(!sh){
-    const aliases={
-      name:['name','participant name','teacher name','full name'],
-      designation:['designation','post','category'],
-      school:['vidyalaya','school','kv name','institution'],
-      region:['region','ro','regional office'],
-      code:['employee code','emp code','employee id','staff id']
-    };
-    for(const candidate of source.getSheets()){
-      const vals=candidate.getRange(1,1,1,Math.max(1,candidate.getLastColumn())).getDisplayValues()[0].map(x=>String(x).trim().toLowerCase());
-      const hasName=vals.some(x=>aliases.name.includes(x));
-      const hasSchool=vals.some(x=>aliases.school.includes(x));
-      if(hasName&&hasSchool){sh=candidate;break;}
-    }
+function syncCorrectionsRoster_(b){
+  const workshopId=String(b.workshopId||'').trim();
+  if(!workshopId) throw new Error('Create or select a workshop first.');
+  const workshop=listRows_('Workshops').find(w=>String(w['Workshop ID'])===workshopId);
+  if(!workshop) throw new Error('Workshop record not found.');
+  const sourceName=String(b.sourceTabName||'PRTM MUMBAI').trim();
+  const book=SpreadsheetApp.openById(CONFIG.CORRECTIONS_SPREADSHEET_ID);
+  const source=book.getSheetByName(sourceName);
+  if(!source) throw new Error('Source nominations tab "'+sourceName+'" was not found.');
+  const sourceLastRow=source.getLastRow(), sourceLastCol=source.getLastColumn();
+  if(sourceLastRow<2) throw new Error('The source nominations tab has no participant rows.');
+  const headers=source.getRange(1,1,1,sourceLastCol).getDisplayValues()[0];
+  const norm=s=>String(s||'').trim().toLowerCase().replace(/\\s+/g,' ');
+  const indexOf=names=>headers.findIndex(h=>names.includes(norm(h)));
+  const ix={
+    name:indexOf(['name of the participant','participant name','name']),
+    designation:indexOf(['designation']),school:indexOf(['school','vidyalaya']),
+    employeeCode:indexOf(['employee code']),doj:indexOf(['yoj','doj','date of joining']),
+    region:indexOf(['region']),gender:indexOf(['gender']),
+    category:indexOf(['category','social category']),
+    whatsapp:indexOf(['whatsapp','whatsapp no','mobile']),
+    email:indexOf(['email','individual email']),
+    vidyalayaEmail:indexOf(['vidyalayamail','vidyalaya email','school email']),
+    dob:indexOf(['dob','date of birth'])
+  };
+  if(ix.name<0||ix.school<0) throw new Error('Source tab must contain Name of the Participant and School columns.');
+  let target=workshop['Corrections Tab']?book.getSheetByName(String(workshop['Corrections Tab'])):null;
+  let created=false;
+  if(!target){
+    target=book.insertSheet(uniqueWorkshopTabName_(book,workshop['Workshop Title']));
+    // Retain all source headings. Copy nomination columns A:AH only;
+    // correction/audit columns AI:AV are intentionally blank for this workshop.
+    target.getRange(1,1,1,sourceLastCol).setValues([source.getRange(1,1,1,sourceLastCol).getValues()[0]]);
+    const sourceRows=source.getRange(2,1,sourceLastRow-1,sourceLastCol).getValues();
+    const output=sourceRows.map(row=>{
+      const newRow=new Array(sourceLastCol).fill('');
+      for(let col=0;col<Math.min(34,sourceLastCol);col++)newRow[col]=row[col];
+      return newRow;
+    }).filter(row=>String(row[ix.name]||'').trim()!=='');
+    if(output.length)target.getRange(2,1,output.length,sourceLastCol).setValues(output);
+    target.setFrozenRows(1);
+    target.getRange(1,1,1,sourceLastCol).setFontWeight('bold').setBackground('#173c70').setFontColor('#ffffff').setWrap(true);
+    for(let col=1;col<=sourceLastCol;col++){try{target.setColumnWidth(col,source.getColumnWidth(col));}catch(e){}}
+    created=true;
   }
-  if(!sh)throw new Error('Could not identify the Nameplates sheet. Select a sheet name in the setup and confirm it has Name and Vidyalaya/School column headings.');
-  const rows=sh.getDataRange().getDisplayValues();if(rows.length<2)throw new Error('The selected Nameplates sheet has no participant rows.');
-  const heads=rows.shift().map(x=>String(x).trim().toLowerCase());
-  const find=names=>heads.findIndex(h=>names.includes(h));
-  const ix={name:find(['name','participant name','teacher name','full name']),designation:find(['designation','post','category']),school:find(['vidyalaya','school','kv name','institution']),region:find(['region','ro','regional office']),code:find(['employee code','emp code','employee id','staff id'])};
-  if(ix.name<0||ix.school<0)throw new Error('Nameplates needs recognizable Name and Vidyalaya/School column headings.');
-  const workshopId=String(b.workshopId||'');if(!workshopId)throw new Error('Select or create a workshop first.');
-  const shOut=ss_().getSheetByName('Participants');let count=0;
-  rows.forEach(row=>{
-    const name=String(row[ix.name]||'').trim();if(!name)return;
-    const code=ix.code>=0?String(row[ix.code]||'').trim():'';
-    const existing=listRows_('Participants').find(p=>String(p['Workshop ID'])===workshopId&&((code&&String(p['Employee Code'])===code)||(!code&&String(p.Name)===name)));
-    if(existing)return;
-    const participantId=Utilities.getUuid();
-    const profileRoot=root_().getFoldersByName('01_Participant_Profiles').next();
-    const folder=profileRoot.createFolder(name.replace(/[\\\\/:*?"<>|]/g,'-')+' - '+participantId.slice(0,8));
-    appendObject_('Participants',{'Participant ID':participantId,'Workshop ID':workshopId,'Name':name,'Designation':ix.designation>=0?row[ix.designation]:'','Vidyalaya':row[ix.school],'Region':ix.region>=0?row[ix.region]:'','Employee Code':code,'Drive Folder ID':folder.getId(),'Drive Folder URL':folder.getUrl(),'Created At':new Date(),'Updated At':new Date()});
-    count++;
+  const targetLastRow=target.getLastRow();
+  const targetValues=targetLastRow>1?target.getRange(2,1,targetLastRow-1,target.getLastColumn()).getValues():[];
+  const targetHeaders=target.getRange(1,1,1,target.getLastColumn()).getDisplayValues()[0];
+  const targetIx={};
+  ['name','designation','school','employeeCode','doj','region','gender','category','whatsapp','email','vidyalayaEmail','dob'].forEach(k=>{
+    const aliases={name:['name of the participant','participant name','name'],designation:['designation'],school:['school','vidyalaya'],employeeCode:['employee code'],doj:['yoj','doj','date of joining'],region:['region'],gender:['gender'],category:['category','social category'],whatsapp:['whatsapp','whatsapp no','mobile'],email:['email','individual email'],vidyalayaEmail:['vidyalayamail','vidyalaya email','school email'],dob:['dob','date of birth']};
+    targetIx[k]=targetHeaders.findIndex(h=>aliases[k].includes(norm(h)));
   });
-  return {sheet:sh.getName(),imported:count};
+  if(!ss_().getSheetByName('Participants'))throw new Error('Workshop Impact database is not initialised. Run initialiseWorkshopImpactHub() once.');
+  const existing=listRows_('Participants').filter(p=>String(p['Workshop ID'])===workshopId);
+  const seenCodes=new Set(existing.map(p=>String(p['Employee Code']||'').trim()).filter(Boolean));
+  const seenNames=new Set(existing.map(p=>norm(p.Name)));
+  const profileRoot=root_().getFoldersByName('01_Participant_Profiles');
+  if(!profileRoot.hasNext())throw new Error('Participant profile folder is missing. Run initialiseWorkshopImpactHub() once.');
+  const profileFolder=profileRoot.next();
+  let imported=0;
+  targetValues.forEach(row=>{
+    const val=k=>targetIx[k]>=0?row[targetIx[k]]:'';
+    const name=String(val('name')||'').trim();if(!name)return;
+    const code=String(val('employeeCode')||'').trim();
+    if((code&&seenCodes.has(code))||(!code&&seenNames.has(norm(name))))return;
+    const participantId=Utilities.getUuid();
+    const safeName=name.replace(/[\\\\/:*?"<>|]/g,'-').slice(0,70);
+    const folder=profileFolder.createFolder(safeName+' - '+participantId.slice(0,8));
+    appendObject_('Participants',{
+      'Participant ID':participantId,'Workshop ID':workshopId,'Name':name,
+      'Designation':val('designation'),'Vidyalaya':val('school'),'Region':val('region'),
+      'Employee Code':code,'DOJ':val('doj),'DOB':val('dob'),'Gender':val('gender'),
+      'Social Category':val('category'),'WhatsApp':val('whatsapp'),
+      'Individual Email':val('email'),'Vidyalaya Email':val('vidyalayaEmail'),
+      'Drive Folder ID':folder.getId(),'Drive Folder URL':folder.getUrl(),
+      'Created At':new Date(),'Updated At':new Date()
+    });
+    if(code)seenCodes.add(code);seenNames.add(norm(name));imported++;
+  });
+  ensureWorkshopMetadataColumns_();
+  const nominatedCount=targetValues.filter(row=>String(row[targetIx.name]||'').trim()).length;
+  setWorkshopMetadata_(workshopId,target.getName(),sourceName,nominatedCount);
+  return {sourceSpreadsheet:book.getName(),sourceTab:sourceName,createdTab:target.getName(),created:created,nominationRows:nominatedCount,imported:imported,tabUrl:book.getUrl()+'#gid='+target.getSheetId()};
+}
+function uniqueWorkshopTabName_(book,title){
+  let base=String(title||'Workshop').replace(/[\\\\/:*?\[\]]/g,' ').replace(/\\s+/g,' ').trim();
+  if(!base)base='Workshop';
+  base=base.slice(0,90);
+  let name=base,n=2;
+  while(book.getSheetByName(name)){const suffix=' ('+n+')';name=base.slice(0,100-suffix.length)+suffix;n++;}
+  return name;
+}
+function ensureWorkshopMetadataColumns_(){
+  const sh=ss_().getSheetByName('Workshops');
+  ['Corrections Tab','Nomination Source Tab','Nominated Count'].forEach(h=>{
+    const heads=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
+    if(heads.indexOf(h)<0)sh.getRange(1,sh.getLastColumn()+1).setValue(h);
+  });
+}
+function setWorkshopMetadata_(id,tabName,sourceName,count){
+  const sh=ss_().getSheetByName('Workshops'),data=sh.getDataRange().getValues(),heads=data[0];
+  const idCol=heads.indexOf('Workshop ID');
+  const rowIndex=data.findIndex((r,i)=>i>0&&String(r[idCol])===String(id));
+  if(rowIndex<1)return;
+  ['Corrections Tab','Nomination Source Tab','Nominated Count'].forEach((h,i)=>sh.getRange(rowIndex+1,heads.indexOf(h)+1).setValue([tabName,sourceName,count][i]));
 }
 
 function listRows_(name){
