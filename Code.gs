@@ -5,6 +5,7 @@
 const CONFIG = {
   SPREADSHEET_ID: '1y8BQ3UsRE7xlHQFPyRVops7vOh8n7ZOvsEuI4sLXMZQ',
   DRIVE_ROOT_ID: '1pFe84ogk9ihbPDTmwscOVPHvIyUcYC7q',
+  CORRECTIONS_SPREADSHEET_ID: '1W1N0mDY6t2d_GGJrqgkHgGeJrK9-kg0A2HMQAojkhr0',
   // Set to the Nameplates spreadsheet ID if it is not the master spreadsheet.
   NAMEPLATES_SPREADSHEET_ID: '1y8BQ3UsRE7xlHQFPyRVops7vOh8n7ZOvsEuI4sLXMZQ',
   NAMEPLATES_SHEET_NAME: '', // Leave blank to auto-detect a sheet with participant/name and Vidyalaya headers.
@@ -191,5 +192,21 @@ function exportAdminCsv_(b){
   const file=root_().getFoldersByName('08_Administrative_Reports').next().createFile('Workshop-participants-export.csv',csv,MimeType.CSV);
   return {url:file.getUrl()};
 }
+
+/**
+ * Read-only diagnostic for the supplied workshop corrections spreadsheet.
+ * Run this from the Apps Script editor. It does not create, edit or delete tabs.
+ */
+function inspectCorrectionsWorkbook(){
+  const book=SpreadsheetApp.openById(CONFIG.CORRECTIONS_SPREADSHEET_ID);
+  const report=book.getSheets().map(sh=>{
+    const width=Math.max(sh.getLastColumn(),1);
+    const headers=sh.getLastRow()?sh.getRange(1,1,1,width).getDisplayValues()[0]:[];
+    return {sheetName:sh.getName(),lastRow:sh.getLastRow(),lastColumn:sh.getLastColumn(),headers:headers};
+  });
+  Logger.log(JSON.stringify({spreadsheetName:book.getName(),spreadsheetUrl:book.getUrl(),sheets:report},null,2));
+  return report;
+}
+
 /** Run once after checking the configured source. */
 function initialiseWorkshopImpactHub(){return setup();}
