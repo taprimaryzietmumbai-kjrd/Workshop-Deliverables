@@ -151,7 +151,7 @@ function syncCorrectionsRoster_(b){
     const code=String(val('employeeCode')||'').trim();
     if((code&&seenCodes.has(code))||(!code&&seenNames.has(norm(name))))return;
     const participantId=Utilities.getUuid();
-    const safeName=name.replace(/[\\\\/:*?"<>|]/g,'-').slice(0,70);
+    const safeName=name.replace(/[^\\p{L}\\p{N}\\s._-]/gu,'-').slice(0,70);
     const folder=profileFolder.createFolder(safeName+' - '+participantId.slice(0,8));
     appendObject_('Participants',{
       'Participant ID':participantId,'Workshop ID':workshopId,'Name':name,
