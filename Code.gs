@@ -6,8 +6,8 @@ const CONFIG = {
   SPREADSHEET_ID: '1y8BQ3UsRE7xlHQFPyRVops7vOh8n7ZOvsEuI4sLXMZQ',
   DRIVE_ROOT_ID: '1pFe84ogk9ihbPDTmwscOVPHvIyUcYC7q',
   // Set to the Nameplates spreadsheet ID if it is not the master spreadsheet.
-  NAMEPLATES_SPREADSHEET_ID: '',
-  NAMEPLATES_SHEET_NAME: '',
+  NAMEPLATES_SPREADSHEET_ID: '1y8BQ3UsRE7xlHQFPyRVops7vOh8n7ZOvsEuI4sLXMZQ',
+  NAMEPLATES_SHEET_NAME: '', // Leave blank to auto-detect a sheet with participant/name and Vidyalaya headers.
   ADMIN_EMAILS: [] // Add authorised ZIET admin email addresses.
 };
 const SHEETS = {
@@ -58,6 +58,9 @@ function setup(){
 function route_(b){
   switch(b.action){
     case 'setup': return setup();
+    case 'listSheets': return {sheets:ss_().getSheets().map(s=>s.getName())};
+    case 'createWorkshop': return createWorkshop_(b);
+    case 'syncNameplates': return syncNameplates_(b);
     case 'listWorkshops': return {workshops:listRows_('Workshops').filter(r=>String(r['Workshop Title']||'').trim()).map(r=>({id:r['Workshop ID'],title:r['Workshop Title']}))};
     case 'listParticipants': return {participants:listRows_('Participants').filter(r=>String(r['Workshop ID'])===String(b.workshopId)).map(r=>({id:r['Participant ID'],name:r.Name,designation:r.Designation,vidyalaya:r.Vidyalaya}))};
     case 'saveSubmission': return saveSubmission_(b);
@@ -67,6 +70,52 @@ function route_(b){
     default: throw new Error('Unknown action: '+b.action);
   }
 }
+
+function createWorkshop_(b){
+  const title=String(b.title||'').trim();if(!title)throw new Error('Enter a workshop title');
+  const id='WS-'+Utilities.getUuid().slice(0,8).toUpperCase();
+  appendObject_('Workshops',{'Workshop ID':id,'Workshop Title':title,'Start Date':b.startDate||'','End Date':b.endDate||'','Region':b.region||'','Status':'Active','Created At':new Date()});
+  return {id,title};
+}
+function syncNameplates_(b){
+  const sourceId=CONFIG.NAMEPLATES_SPREADSHEET_ID||CONFIG.SPREADSHEET_ID;
+  const source=SpreadsheetApp.openById(sourceId);
+  const wanted=String(b.sheetName||CONFIG.NAMEPLATES_SHEET_NAME||'').trim();
+  let sh=wanted?source.getSheetByName(wanted):null;
+  if(!sh){
+    const aliases={
+      name:['name','participant name','teacher name','full name'],
+      designation:['designation','post','category'],
+      school:['vidyalaya','school','kv name','institution'],
+      region:['region','ro','regional office'],
+      code:['employee code','emp code','employee id','staff id']
+    };
+    for(const candidate of source.getSheets()){
+      const vals=candidate.getRange(1,1,1,Math.max(1,candidate.getLastColumn())).getDisplayValues()[0].map(x=>String(x).trim().toLowerCase());
+      const hasName=vals.some(x=>aliases.name.includes(x));
+      const hasSchool=vals.some(x=>aliases.school.includes(x));
+      if(hasName&&hasSchool){sh=candidate;break;}
+    }
+  }
+  if(!sh)throw new Error('Could not identify the Nameplates sheet. Select a sheet name in the setup and confirm it has Name and Vidyalaya/School column headings.');
+  const rows=sh.getDataRange().getDisplayValues();if(rows.length<2)throw new Error('The selected Nameplates sheet has no participant rows.');
+  const heads=rows.shift().map(x=>String(x).trim().toLowerCase());
+  const find=names=>heads.findIndex(h=>names.includes(h));
+  const ix={name:find(['name','participant name','teacher name','full name']),designation:find(['designation','post','category']),school:find(['vidyalaya','school','kv name','institution']),region:find(['region','ro','regional office']),code:find(['employee code','emp code','employee id','staff id'])};
+  if(ix.name<0||ix.school<0)throw new Error('Nameplates needs recognizable Name and Vidyalaya/School column headings.');
+  const workshopId=String(b.workshopId||'');if(!workshopId)throw new Error('Select or create a workshop first.');
+  const shOut=ss_().getSheetByName('Participants');let count=0;
+  rows.forEach(row=>{
+    const name=String(row[ix.name]||'').trim();if(!name)return;
+    const code=ix.code>=0?String(row[ix.code]||'').trim():'';
+    const existing=listRows_('Participants').find(p=>String(p['Workshop ID'])===workshopId&&((code&&String(p['Employee Code'])===code)||(!code&&String(p.Name)===name)));
+    if(existing)return;
+    appendObject_('Participants',{'Participant ID':Utilities.getUuid(),'Workshop ID':workshopId,'Name':name,'Designation':ix.designation>=0?row[ix.designation]:'','Vidyalaya':row[ix.school],'Region':ix.region>=0?row[ix.region]:'','Employee Code':code,'Created At':new Date(),'Updated At':new Date()});
+    count++;
+  });
+  return {sheet:sh.getName(),imported:count};
+}
+
 function listRows_(name){
   const sh=ss_().getSheetByName(name); if(!sh||sh.getLastRow()<2)return [];
   const vals=sh.getDataRange().getValues(), heads=vals.shift();
