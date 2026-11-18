@@ -69,8 +69,30 @@ function renderForm(target,fields,key){
 }
 function initForms(){document.getElementById("profileForm").innerHTML=profileFields.map(fieldHTML).join("");renderForm("deliverable-pre",schemas.pre,"pre");renderForm("deliverable-ongoing",schemas.ongoing,"ongoing");renderForm("deliverable-post",schemas.post,"post");renderForm("deliverable-research",schemas.research,"research");renderForm("deliverable-monitor",[["Monitoring Milestone","milestone","select","30 Days|60 Days|90 Days"],["Implementation Status","status","select","Not Started|In Progress|Implemented|Needs Support"],["Progress Update","progress","textarea"],["Evidence / Report Link","monitorLink","url"],["Next Steps","nextSteps","textarea"]],"monitor")}
 function api(action,data={}){const payload={action,...data};if(window.google&&google.script&&google.script.run){return new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).apiCall(payload))}if(!APP_CONFIG.API_URL||APP_CONFIG.API_URL.includes("PASTE_")){alert("Open the deployed Apps Script Web App URL to use the live portal. The GitHub repository contains the source files.");return Promise.reject("Open the Apps Script Web App")}return fetch(APP_CONFIG.API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)}).then(r=>r.json()).then(j=>{if(!j.ok)throw new Error(j.error||"Request failed");return j})}
-function loadWorkshops(){if(!APP_CONFIG.API_URL){document.getElementById("workshop").innerHTML='<option value="">Apps Script URL required</option>';document.getElementById("connection").textContent="Backend setup required";return}api("listWorkshops").then(j=>{document.getElementById("workshop").innerHTML='<option value="">Select workshop</option>'+j.workshops.map(w=>'<option value="'+w.id+'">'+w.title+'</option>').join("");document.getElementById("connection").textContent="Connected"}).catch(e=>{document.getElementById("connection").textContent="Connection error";console.error(e)})}
-document.getElementById("workshop").addEventListener("change",e=>{activeWorkshop=e.target.value;document.getElementById("participant").innerHTML='<option>Loading roster…</option>';api("listParticipants",{workshopId:activeWorkshop}).then(j=>{roster=j.participants;document.getElementById("participant").innerHTML='<option value="">Select your name</option>'+roster.map(p=>'<option value="'+p.id+'">'+p.name+' · '+(p.designation||"")+'</option>').join("")}).catch(err=>alert(err.message))});
+function loadParticipants(workshopId){
+ activeWorkshop=workshopId||"";
+ const select=document.getElementById("participant");
+ roster=[];
+ if(!activeWorkshop){select.innerHTML='<option value="">Select workshop first</option>';return}
+ select.innerHTML='<option value="">Loading participants…</option>';
+ api("listParticipants",{workshopId:activeWorkshop}).then(j=>{
+  roster=j.participants||[];
+  select.innerHTML='<option value="">Select your name</option>'+roster.map(p=>'<option value="'+p.id+'">'+p.name+' · '+(p.designation||"")+'</option>').join("");
+  if(!roster.length)select.innerHTML='<option value="">No participants found for this workshop</option>';
+ }).catch(err=>{select.innerHTML='<option value="">Could not load participants</option>';console.error(err);alert(err.message||err)});
+}
+function loadWorkshops(){
+ if(!APP_CONFIG.API_URL){document.getElementById("workshop").innerHTML='<option value="">Apps Script URL required</option>';document.getElementById("connection").textContent="Backend setup required";return}
+ api("listWorkshops").then(j=>{
+  const ws=j.workshops||[];
+  const sel=document.getElementById("workshop");
+  sel.innerHTML='<option value="">Select workshop</option>'+ws.map(w=>'<option value="'+w.id+'">'+w.title+'</option>').join("");
+  document.getElementById("connection").textContent="Connected";
+  if(ws.length){sel.value=ws[ws.length-1].id;loadParticipants(sel.value);}
+  else loadParticipants("");
+ }).catch(e=>{document.getElementById("connection").textContent="Connection error";console.error(e)});
+}
+document.getElementById("workshop").addEventListener("change",e=>loadParticipants(e.target.value));
 document.getElementById("openWorkspace").onclick=()=>{let p=roster.find(x=>x.id===document.getElementById("participant").value);if(!p)return alert("Select your name first.");activeParticipant=p;loadMySubmissions();document.getElementById("view-participant").innerHTML='<h3>Welcome, '+p.name+'</h3><p class="hint">'+(p.designation||"")+' · '+(p.vidyalaya||"")+'</p><div class="notice">Your workspace is linked to the selected workshop roster. Use the navigation to complete your profile and deliverables.</div><div id="participantStageStatus" class="notice">Loading submission status…</div>';document.querySelector('[data-view="profile"]').click()};
 document.getElementById("refresh").onclick=loadWorkshops;
 document.querySelectorAll(".navbtn").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".navbtn").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.querySelectorAll('[id^="view-"]').forEach(x=>x.classList.add("hidden"));document.getElementById("view-"+b.dataset.view).classList.remove("hidden")}));
