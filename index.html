@@ -34,12 +34,20 @@
 <div id="view-post" class="hidden"><h3>03 · Post-Workshop Classroom Impact</h3><p class="hint">Record implementation, student response and verifiable documentary evidence.</p><div id="deliverable-post"></div></div>
 <div id="view-research" class="hidden"><h3>Action Research & Professional Reflection</h3><p class="hint">A structured inquiry cycle: identify a problem, establish baseline, intervene, collect evidence, analyse outcomes and reflect.</p><div id="deliverable-research"></div></div>
 <div id="view-monitor" class="hidden"><h3>30–60–90 Day Follow-up</h3><p class="hint">Longitudinal monitoring of classroom implementation and outcomes.</p><div id="deliverable-monitor"></div></div>
-<div id="view-admin" class="hidden"><h3>ZIET Administrator Dashboard</h3><p class="hint">Aggregated workshop progress, pending submissions, verification and impact status. Admin access is controlled by Apps Script.</p><div class="actions"><button class="btn secondary" id="loadAdmin">Load monitoring summary</button><button class="btn secondary" id="exportCsv">Export visible data</button></div><div id="adminSummary"></div></div>
+<div id="view-admin" class="hidden"><h3>ZIET Administrator Dashboard</h3><p class="hint">Aggregated workshop progress, pending submissions, verification and impact status. Admin access is controlled by Apps Script.</p><div class="notice">Initial setup: run <b>initialiseWorkshopImpactHub()</b> once from the Apps Script editor and approve permissions. Then create a workshop and import the Nameplates roster.</div>
+<div class="formgrid">
+<div class="field"><label>New Workshop Title</label><input id="newWorkshopTitle" placeholder="Enter full workshop title"></div>
+<div class="field"><label>Region / Batch</label><input id="newWorkshopRegion" placeholder="e.g. KVS Mumbai Region / Batch I"></div>
+<div class="field"><label>Start Date</label><input id="newWorkshopStart" type="date"></div>
+<div class="field"><label>End Date</label><input id="newWorkshopEnd" type="date"></div>
+<div class="field"><label>Nameplates Sheet Tab (optional)</label><input id="nameplatesSheet" placeholder="Blank = auto-detect"></div>
+</div>
+<div class="actions"><button class="btn" id="createWorkshop">＋ Create Workshop</button><button class="btn secondary" id="syncRoster">Import Nameplates Participants</button><button class="btn secondary" id="loadAdmin">Load monitoring summary</button><button class="btn secondary" id="exportCsv">Export visible data</button></div><div id="adminSummary"></div></div>
 </div></section>
 <div class="footer">LEARN · IMPLEMENT · DOCUMENT · REFLECT · ZIET Mumbai | Kendriya Vidyalaya Sangathan</div>
 </main>
 <script>
-const APP_CONFIG={API_URL:"",WORKBOOK_ID:"1y8BQ3UsRE7xlHQFPyRVops7vOh8n7ZOvsEuI4sLXMZQ",DRIVE_FOLDER_ID:"1pFe84ogk9ihbPDTmwscOVPHvIyUcYC7q"};
+const APP_CONFIG={API_URL:"PASTE_DEPLOYED_APPS_SCRIPT_EXEC_URL_HERE",WORKBOOK_ID:"1y8BQ3UsRE7xlHQFPyRVops7vOh8n7ZOvsEuI4sLXMZQ",DRIVE_FOLDER_ID:"1pFe84ogk9ihbPDTmwscOVPHvIyUcYC7q"};
 let activeParticipant=null, activeWorkshop=null, roster=[];
 const profileFields=[["Employee Code","employeeCode"],["Date of Joining","doj","date"],["Date of Birth","dob","date"],["Gender","gender","select","Female|Male|Other|Prefer not to say"],["Social Category","socialCategory","select","General|OBC|SC|ST|EWS|Other|Prefer not to say"],["PwD Status","pwdStatus","select","Not Applicable|OH|VH|Others"],["WhatsApp Number","whatsapp"],["Individual Email","individualEmail","email"],["Vidyalaya Email","vidyalayaEmail","email"],["Recognitions earned in KVS","recognitions","textarea"]];
 const schemas={
@@ -61,6 +69,8 @@ document.querySelectorAll('[data-save="profile"]').forEach(b=>b.onclick=()=>save
 function collect(ids){let out={};ids.forEach(id=>{let el=document.getElementById(id);if(el)out[id]=el.value});return out}
 function saveSection(section){if(!activeParticipant)return alert("Choose your participant profile first.");let fields=section==="profile"?profileFields.map(x=>x[1]):(section==="pre"?schemas.pre:section==="ongoing"?schemas.ongoing:section==="post"?schemas.post:section==="research"?schemas.research:[]).map(x=>x[1]);if(section==="monitor")fields=["milestone","status","progress","monitorLink","nextSteps"];let payload={workshopId:activeWorkshop,participantId:activeParticipant.id,section,values:collect(fields)};api("saveSubmission",payload).then(()=>alert("Saved successfully.")).catch(e=>alert(e.message))}
 function downloadWorkbook(){if(!activeParticipant)return alert("Choose participant first.");api("createWorkbookPdf",{workshopId:activeWorkshop,participantId:activeParticipant.id}).then(j=>window.open(j.url,"_blank")).catch(e=>alert(e.message))}
+document.getElementById("createWorkshop").onclick=()=>api("createWorkshop",{title:document.getElementById("newWorkshopTitle").value,region:document.getElementById("newWorkshopRegion").value,startDate:document.getElementById("newWorkshopStart").value,endDate:document.getElementById("newWorkshopEnd").value}).then(j=>{activeWorkshop=j.id;document.getElementById("workshop").innerHTML+='<option value="'+j.id+'" selected>'+j.title+'</option>';alert("Workshop created. Now import the participant list.");}).catch(e=>alert(e.message));
+document.getElementById("syncRoster").onclick=()=>{if(!activeWorkshop)return alert("Create or select a workshop first.");api("syncNameplates",{workshopId:activeWorkshop,sheetName:document.getElementById("nameplatesSheet").value}).then(j=>{alert("Imported "+j.imported+" participants from sheet: "+j.sheet);loadWorkshops();}).catch(e=>alert(e.message))};
 document.getElementById("loadAdmin").onclick=()=>api("adminSummary",{workshopId:activeWorkshop}).then(j=>{document.getElementById("adminSummary").innerHTML='<div class="notice">Participants: '+j.totalParticipants+' · Pre submissions: '+j.pre+' · Ongoing: '+j.ongoing+' · Post: '+j.post+' · Action Research: '+j.research+'</div>'}).catch(e=>alert(e.message));
 document.getElementById("exportCsv").onclick=()=>api("exportAdminCsv",{workshopId:activeWorkshop}).then(j=>window.open(j.url,"_blank")).catch(e=>alert(e.message));
 initForms();loadWorkshops();
