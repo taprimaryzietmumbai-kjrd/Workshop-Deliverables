@@ -115,7 +115,10 @@ function syncNameplates_(b){
     const code=ix.code>=0?String(row[ix.code]||'').trim():'';
     const existing=listRows_('Participants').find(p=>String(p['Workshop ID'])===workshopId&&((code&&String(p['Employee Code'])===code)||(!code&&String(p.Name)===name)));
     if(existing)return;
-    appendObject_('Participants',{'Participant ID':Utilities.getUuid(),'Workshop ID':workshopId,'Name':name,'Designation':ix.designation>=0?row[ix.designation]:'','Vidyalaya':row[ix.school],'Region':ix.region>=0?row[ix.region]:'','Employee Code':code,'Created At':new Date(),'Updated At':new Date()});
+    const participantId=Utilities.getUuid();
+    const profileRoot=root_().getFoldersByName('01_Participant_Profiles').next();
+    const folder=profileRoot.createFolder(name.replace(/[\\\\/:*?"<>|]/g,'-')+' - '+participantId.slice(0,8));
+    appendObject_('Participants',{'Participant ID':participantId,'Workshop ID':workshopId,'Name':name,'Designation':ix.designation>=0?row[ix.designation]:'','Vidyalaya':row[ix.school],'Region':ix.region>=0?row[ix.region]:'','Employee Code':code,'Drive Folder ID':folder.getId(),'Drive Folder URL':folder.getUrl(),'Created At':new Date(),'Updated At':new Date()});
     count++;
   });
   return {sheet:sh.getName(),imported:count};
@@ -168,7 +171,7 @@ function adminSummary_(b){
 function audit_(action,b){try{appendObject_('Audit_Log',{'Timestamp':new Date(),'User Email':Session.getActiveUser().getEmail(),'Action':action,'Workshop ID':b.workshopId,'Participant ID':b.participantId,'Details':JSON.stringify(b.values||{})});}catch(e){}}
 function createWorkbookPdf_(b){
   const p=listRows_('Participants').find(r=>String(r['Participant ID'])===String(b.participantId));if(!p)throw new Error('Participant not found');
-  const doc=DocumentApp.create('Workshop Impact Workbook - '+p.Name);const body=doc.getBody();
+  const doc=DocumentApp.create('Workshop Impact Workbook - '+p.Name);const body=doc.getBody();body.setPageWidth(595.28).setPageHeight(841.89).setMarginTop(36).setMarginBottom(36).setMarginLeft(42).setMarginRight(42);
   body.appendParagraph('ZIET MUMBAI | KENDRIYA VIDYALAYA SANGATHAN').setHeading(DocumentApp.ParagraphHeading.HEADING2);
   body.appendParagraph('WORKSHOP DELIVERABLES & CLASSROOM IMPACT WORKBOOK').setHeading(DocumentApp.ParagraphHeading.TITLE);
   body.appendParagraph('Participant: '+p.Name+' | '+(p.Designation||'')+' | '+(p.Vidyalaya||''));
