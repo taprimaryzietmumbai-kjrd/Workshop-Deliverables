@@ -6,6 +6,7 @@ const CONFIG = {
   SPREADSHEET_ID: '1y8BQ3UsRE7xlHQFPyRVops7vOh8n7ZOvsEuI4sLXMZQ',
   DRIVE_ROOT_ID: '1pFe84ogk9ihbPDTmwscOVPHvIyUcYC7q',
   CORRECTIONS_SPREADSHEET_ID: '1W1N0mDY6t2d_GGJrqgkHgGeJrK9-kg0A2HMQAojkhr0',
+  CORRECTIONS_SPREADSHEET_NAME: 'Correction Sheet PRT (Music)',
   // Set to the Nameplates spreadsheet ID if it is not the master spreadsheet.
   NAMEPLATES_SPREADSHEET_ID: '1y8BQ3UsRE7xlHQFPyRVops7vOh8n7ZOvsEuI4sLXMZQ',
   NAMEPLATES_SHEET_NAME: '', // Leave blank to auto-detect a sheet with participant/name and Vidyalaya headers.
@@ -46,6 +47,27 @@ function json_(obj) {
 }
 function ss_(){ return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID); }
 function root_(){ return DriveApp.getFolderById(CONFIG.DRIVE_ROOT_ID); }
+function correctionsBook_(sourceName){
+  // Prefer the configured ID only when it actually contains the requested source tab.
+  try {
+    const configured=SpreadsheetApp.openById(CONFIG.CORRECTIONS_SPREADSHEET_ID);
+    if(configured.getSheetByName(sourceName)) return configured;
+  } catch(e) {}
+  // Recover automatically when the configured ID points to an older/different workbook.
+  const files=DriveApp.getFilesByName(CONFIG.CORRECTIONS_SPREADSHEET_NAME);
+  const matches=[];
+  while(files.hasNext()){
+    const file=files.next();
+    if(file.getMimeType()!=='application/vnd.google-apps.spreadsheet') continue;
+    try {
+      const candidate=SpreadsheetApp.openById(file.getId());
+      if(candidate.getSheetByName(sourceName)) matches.push(candidate);
+    } catch(e) {}
+  }
+  if(matches.length===1) return matches[0];
+  if(matches.length>1) throw new Error('More than one spreadsheet named "'+CONFIG.CORRECTIONS_SPREADSHEET_NAME+'" contains the tab "'+sourceName+'". Please keep only one matching source workbook or set its ID in CONFIG.');
+  throw new Error('The app could not locate tab "'+sourceName+'" in the configured workbook or in the Drive spreadsheet named "'+CONFIG.CORRECTIONS_SPREADSHEET_NAME+'". No source data was changed.'); 
+}
 function setup(){
   const ss=ss_();
   Object.keys(SHEETS).forEach(name=>{
@@ -95,7 +117,7 @@ function syncCorrectionsRoster_(b){
   const workshop=listRows_('Workshops').find(w=>String(w['Workshop ID'])===workshopId);
   if(!workshop) throw new Error('Workshop record not found.');
   const sourceName=String(b.sourceTabName||'PRTM MUMBAI').trim();
-  const book=SpreadsheetApp.openById(CONFIG.CORRECTIONS_SPREADSHEET_ID);
+  const book=correctionsBook_(sourceName);
   const source=book.getSheetByName(sourceName);
   if(!source) throw new Error('Source nominations tab "'+sourceName+'" was not found.');
   const sourceLastRow=source.getLastRow(), sourceLastCol=source.getLastColumn();
