@@ -155,7 +155,7 @@ function syncCorrectionsRoster_(b){
     appendObject_('Participants',{
       'Participant ID':participantId,'Workshop ID':workshopId,'Name':name,
       'Designation':val('designation'),'Vidyalaya':val('school'),'Region':val('region'),
-      'Employee Code':code,'DOJ':val('doj),'DOB':val('dob'),'Gender':val('gender'),
+      'Employee Code':code,'DOJ':val('doj'),'DOB':val('dob'),'Gender':val('gender'),
       'Social Category':val('category'),'WhatsApp':val('whatsapp'),
       'Individual Email':val('email'),'Vidyalaya Email':val('vidyalayaEmail'),
       'Drive Folder ID':folder.getId(),'Drive Folder URL':folder.getUrl(),
