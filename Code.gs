@@ -151,7 +151,7 @@ function syncCorrectionsRoster_(b){
     const code=String(val('employeeCode')||'').trim();
     if((code&&seenCodes.has(code))||(!code&&seenNames.has(norm(name))))return;
     const participantId=Utilities.getUuid();
-    const safeName=name.replace(/[^\\p{L}\\p{N}\\s._-]/gu,'-').slice(0,70);
+    const safeName=name.replace(/[^\p{L}\p{N}\s._-]/gu,'-').slice(0,70);
     const folder=profileFolder.createFolder(safeName+' - '+participantId.slice(0,8));
     appendObject_('Participants',{
       'Participant ID':participantId,'Workshop ID':workshopId,'Name':name,
@@ -170,7 +170,7 @@ function syncCorrectionsRoster_(b){
   return {sourceSpreadsheet:book.getName(),sourceTab:sourceName,createdTab:target.getName(),created:created,nominationRows:nominatedCount,imported:imported,tabUrl:book.getUrl()+'#gid='+target.getSheetId()};
 }
 function uniqueWorkshopTabName_(book,title){
-  let base=String(title||'Workshop').replace(/[\\\\/:*?\[\]]/g,' ').replace(/\s+/g,' ').trim();
+  let base=String(title||'Workshop').replace(/[^\p{L}\p{N}\s._-]/gu,' ').replace(/\s+/g,' ').trim();
   if(!base)base='Workshop';
   base=base.slice(0,90);
   let name=base,n=2;
