@@ -96,12 +96,12 @@ function syncCorrectionsRoster_(b){
   const sourceLastRow=source.getLastRow(), sourceLastCol=source.getLastColumn();
   if(sourceLastRow<2) throw new Error('The source nominations tab has no participant rows.');
   const headers=source.getRange(1,1,1,sourceLastCol).getDisplayValues()[0];
-  const norm=s=>String(s||'').trim().toLowerCase().replace(/\\s+/g,' ');
+  const norm=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   const indexOf=names=>headers.findIndex(h=>names.includes(norm(h)));
   const ix={
     name:indexOf(['name of the participant','participant name','name']),
     designation:indexOf(['designation']),school:indexOf(['school','vidyalaya']),
-    employeeCode:indexOf(['employee code']),doj:indexOf(['yoj','doj','date of joining']),
+    employeeCode:indexOf(['employee code']),doj:indexOf(['dojkvs','date of joining','doj']),
     region:indexOf(['region']),gender:indexOf(['gender']),
     category:indexOf(['category','social category']),
     whatsapp:indexOf(['whatsapp','whatsapp no','mobile']),
@@ -134,7 +134,7 @@ function syncCorrectionsRoster_(b){
   const targetHeaders=target.getRange(1,1,1,target.getLastColumn()).getDisplayValues()[0];
   const targetIx={};
   ['name','designation','school','employeeCode','doj','region','gender','category','whatsapp','email','vidyalayaEmail','dob'].forEach(k=>{
-    const aliases={name:['name of the participant','participant name','name'],designation:['designation'],school:['school','vidyalaya'],employeeCode:['employee code'],doj:['yoj','doj','date of joining'],region:['region'],gender:['gender'],category:['category','social category'],whatsapp:['whatsapp','whatsapp no','mobile'],email:['email','individual email'],vidyalayaEmail:['vidyalayamail','vidyalaya email','school email'],dob:['dob','date of birth']};
+    const aliases={name:['name of the participant','participant name','name'],designation:['designation'],school:['school','vidyalaya'],employeeCode:['employee code'],doj:['dojkvs','date of joining','doj'],region:['region'],gender:['gender'],category:['category','social category'],whatsapp:['whatsapp','whatsapp no','mobile'],email:['email','individual email'],vidyalayaEmail:['vidyalayamail','vidyalaya email','school email'],dob:['dob','date of birth']};
     targetIx[k]=targetHeaders.findIndex(h=>aliases[k].includes(norm(h)));
   });
   if(!ss_().getSheetByName('Participants'))throw new Error('Workshop Impact database is not initialised. Run initialiseWorkshopImpactHub() once.');
@@ -170,7 +170,7 @@ function syncCorrectionsRoster_(b){
   return {sourceSpreadsheet:book.getName(),sourceTab:sourceName,createdTab:target.getName(),created:created,nominationRows:nominatedCount,imported:imported,tabUrl:book.getUrl()+'#gid='+target.getSheetId()};
 }
 function uniqueWorkshopTabName_(book,title){
-  let base=String(title||'Workshop').replace(/[\\\\/:*?\[\]]/g,' ').replace(/\\s+/g,' ').trim();
+  let base=String(title||'Workshop').replace(/[\\\\/:*?\[\]]/g,' ').replace(/\s+/g,' ').trim();
   if(!base)base='Workshop';
   base=base.slice(0,90);
   let name=base,n=2;
