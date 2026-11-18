@@ -310,7 +310,7 @@ function createWorkbookPdf_(b){
 }
 function exportAdminCsv_(b){
   const data=listRows_('Participants').filter(r=>String(r['Workshop ID'])===String(b.workshopId));
-  const csv=[Object.keys(data[0]||{}).join(','),...data.map(r=>Object.values(r).map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(','))].join('\\n');
+  const csv=[Object.keys(data[0]||{}).join(','),...data.map(function(r){return Object.values(r).map(function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}).join(',');})].join(String.fromCharCode(10));
   const file=root_().getFoldersByName('08_Administrative_Reports').next().createFile('Workshop-participants-export.csv',csv,MimeType.CSV);
   return {url:file.getUrl()};
 }
